@@ -1,4 +1,4 @@
-module american-nameko
+module github.com/joejoe-am/american-nameko
 
 go 1.23.3
 
