@@ -4,13 +4,6 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
-const (
-	MethodGet    = "GET"
-	MethodPost   = "POST"
-	MethodPut    = "PUT"
-	MethodDelete = "DELETE"
-)
-
 type Router interface {
 	Add(methods []string, path string, handler Handler) Router
 	Get(path string, handler Handler) Router
@@ -60,6 +53,7 @@ func (http *Http) Handler() fasthttp.RequestHandler {
 	}
 }
 
+// Add allows you to specify multiple HTTP methods to register a route.
 func (http *Http) Add(methods []string, path string, handler Handler) Router {
 	http.routes = append(http.routes, Route{
 		Methods: methods,
@@ -69,8 +63,16 @@ func (http *Http) Add(methods []string, path string, handler Handler) Router {
 	return http
 }
 
+// Get registers a route for GET methods that requests a representation
+// of the specified resource. Requests using GET should only retrieve data.
 func (http *Http) Get(path string, handler Handler) Router {
 	return http.Add([]string{MethodGet}, path, handler)
+}
+
+// Head registers a route for HEAD methods that asks for a response identical
+// to that of a GET request, but without the response body.
+func (http *Http) Head(path string, handler Handler) Router {
+	return http.Add([]string{MethodHead}, path, handler)
 }
 
 func (http *Http) Post(path string, handler Handler) Router {
