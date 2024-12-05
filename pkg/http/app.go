@@ -29,16 +29,6 @@ func New(config ...Config) *Http {
 		routes: make([]Route, 0),
 	}
 
-	if len(config) > 0 && config[0].Addr != "" {
-		http.server = &fasthttp.Server{
-			Handler: http.Handler(),
-		}
-	} else {
-		http.server = &fasthttp.Server{
-			Handler: http.Handler(),
-		}
-	}
-
 	http.init()
 
 	return http
@@ -94,14 +84,19 @@ func (http *Http) Head(path string, handler Handler) Router {
 	return http.Add([]string{MethodHead}, path, handler)
 }
 
+// Post registers a route for POST methods that is used to submit an entity to the
+// specified resource, often causing a change in state or side effects on the server.
 func (http *Http) Post(path string, handler Handler) Router {
 	return http.Add([]string{MethodPost}, path, handler)
 }
 
+// Put registers a route for PUT methods that replaces all current representations
+// of the target resource with the request payload.
 func (http *Http) Put(path string, handler Handler) Router {
 	return http.Add([]string{MethodPut}, path, handler)
 }
 
+// Delete registers a route for DELETE methods that deletes the specified resource.
 func (http *Http) Delete(path string, handler Handler) Router {
 	return http.Add([]string{MethodDelete}, path, handler)
 }

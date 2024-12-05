@@ -13,20 +13,13 @@ type Route struct {
 
 // matchRoute checks if the incoming request matches a registered route
 func matchRoute(ctx *fasthttp.RequestCtx, route Route) bool {
-	if !contains(route.Methods, string(ctx.Method())) {
-		return false
-	}
-	if route.Path != string(ctx.Path()) {
-		return false
-	}
-	return true
-}
-
-// contains checks if a slice contains a string
-func contains(slice []string, item string) bool {
-	for _, s := range slice {
-		if strings.EqualFold(s, item) {
-			return true
+	// Check if the HTTP method matches (case-insensitive)
+	for _, method := range route.Methods {
+		if strings.EqualFold(method, string(ctx.Method())) {
+			// Check if the path matches
+			if route.Path == string(ctx.Path()) {
+				return true
+			}
 		}
 	}
 	return false
