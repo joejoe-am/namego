@@ -15,10 +15,20 @@ func main() {
 		ctx.WriteString("OK")
 	})
 
-	log.Println("Server running on :8080")
-	if err := server.Listen(":8080"); err != nil {
-		log.Fatalf("Error starting server: %v", err)
-	}
+	select {} // fix it later
+
+	//authRpc, err := rpc.NewRpc("auth")
+	//
+	//response, err := authRpc.CallRpc("health_check", map[string]interface{}{})
+	//
+	//if err != nil {
+	//	return
+	//}
+	//fmt.Println(response)
+	//
+	//if err != nil {
+	//	log.Fatal(err)
+	//}
 }
 
 // Configure logging

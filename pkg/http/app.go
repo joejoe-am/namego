@@ -1,6 +1,7 @@
 package http
 
 import (
+	log "github.com/sirupsen/logrus"
 	"github.com/valyala/fasthttp"
 	"sync"
 )
@@ -30,6 +31,16 @@ func New(config ...Config) *Http {
 	}
 
 	http.init()
+
+	// handle the thread kill
+	// think of a better way.
+
+	go func() {
+		log.Println("Server running on :8080")
+		if err := http.Listen(":8080"); err != nil {
+			log.Fatalf("Error starting server: %v", err)
+		}
+	}()
 
 	return http
 }
