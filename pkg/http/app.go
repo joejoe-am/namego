@@ -1,7 +1,7 @@
 package http
 
 import (
-	log "github.com/sirupsen/logrus"
+	"fmt"
 	"github.com/valyala/fasthttp"
 	"sync"
 )
@@ -36,9 +36,9 @@ func New(config ...Config) *Http {
 	// think of a better way.
 
 	go func() {
-		log.Println("Server running on :8080")
+		fmt.Println("Server running on :8080")
 		if err := http.Listen(":8080"); err != nil {
-			log.Fatalf("Error starting server: %v", err)
+			fmt.Println("Error starting server: %v", err)
 		}
 	}()
 
