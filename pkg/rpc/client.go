@@ -4,17 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/google/uuid"
-	"github.com/joejoe-am/american-nameko/configs"
+	"github.com/joejoe-am/namego/configs"
 	amqp "github.com/rabbitmq/amqp091-go"
-	"sync"
 )
-
-type RPCResponse struct {
-	Result interface{} `json:"result"`
-	Err    error       `json:"error"`
-}
-
-// use a single amqp connection for all works (shared extension.)
 
 type Rpc struct {
 	serviceName    string
@@ -22,11 +14,15 @@ type Rpc struct {
 	amqpChannel    *amqp.Channel
 	replyQueueName string
 	replyQueueID   string
-	mutex          sync.Mutex
 }
 
-// NewRpc initializes and returns an Rpc instance for a specific service.
-func NewRpc(serviceName string) (*Rpc, error) {
+type RPCResponse struct {
+	Result interface{} `json:"result"`
+	Err    error       `json:"error"`
+}
+
+// ServiceRpc initializes and returns an Rpc instance for a specific service.
+func ServiceRpc(serviceName string) (*Rpc, error) {
 	conn, err := amqp.Dial(configs.RabbitMQURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to RabbitMQ: %v", err)
@@ -41,11 +37,6 @@ func NewRpc(serviceName string) (*Rpc, error) {
 		serviceName:    serviceName,
 		amqpConnection: conn,
 		amqpChannel:    ch,
-	}
-
-	if err := rpc.initReplyQueue(); err != nil {
-		rpc.Close()
-		return nil, err
 	}
 
 	return rpc, nil
@@ -64,6 +55,8 @@ func (r *Rpc) initReplyQueue() error {
 		false,
 		amqp.Table{"x-expires": int32(RpcReplyQueueTtl)},
 	)
+	fmt.Printf("Declaring queue %s", r.replyQueueName)
+
 	if err != nil {
 		return fmt.Errorf("failed to declare reply queue: %v", err)
 	}
@@ -83,8 +76,10 @@ func (r *Rpc) initReplyQueue() error {
 
 // CallRpc performs the RPC call for the specific service.
 func (r *Rpc) CallRpc(methodName string, args interface{}) (*RPCResponse, error) {
-	r.mutex.Lock()
-	defer r.mutex.Unlock()
+	if err := r.initReplyQueue(); err != nil {
+		r.Close()
+		return nil, err
+	}
 
 	correlationID := uuid.New().String()
 	routingKey := fmt.Sprintf("%s.%s", r.serviceName, methodName)
@@ -107,7 +102,7 @@ func (r *Rpc) CallRpc(methodName string, args interface{}) (*RPCResponse, error)
 		amqp.Publishing{
 			ContentType:   "application/json",
 			CorrelationId: correlationID,
-			ReplyTo:       r.replyQueueName,
+			ReplyTo:       r.replyQueueID,
 			Body:          body,
 		},
 	)
@@ -115,12 +110,11 @@ func (r *Rpc) CallRpc(methodName string, args interface{}) (*RPCResponse, error)
 		return nil, fmt.Errorf("failed to publish message: %v", err)
 	}
 
-	// Consume the reply message
 	messages, err := r.amqpChannel.Consume(
 		r.replyQueueName,
 		"",
 		true,
-		false,
+		true,
 		false,
 		false,
 		nil,

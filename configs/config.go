@@ -4,7 +4,7 @@ package configs
 
 // TODO: filled by user
 const (
-	ServiceName  = "nameko"
+	ServiceName  = "joe"
 	RabbitMQURL  = "amqp://guest:guest@localhost:5672/"
 	ExchangeName = "nameko-rpc"
 )
