@@ -9,13 +9,17 @@ import (
 	"sync"
 )
 
+var (
+	replyQueueName       string
+	replyQueueID         string
+	ReplyQueueOnce       sync.Once
+	globalPendingReplies sync.Map // To track pending replies (correlation_id -> channel)
+)
+
 type Rpc struct {
 	serviceName    string
 	amqpConnection *amqp.Connection
 	amqpChannel    *amqp.Channel
-	replyQueueName string
-	replyQueueID   string
-	pendingReplies sync.Map // To track pending replies (correlation_id -> channel)
 }
 
 type RPCResponse struct {
@@ -30,15 +34,15 @@ type RPCResponse struct {
 }
 
 // ServiceRpc initializes and returns an Rpc instance for a specific service.
-func ServiceRpc(serviceName string) (*Rpc, error) {
+func ServiceRpc(serviceName string) *Rpc {
 	conn, err := amqp.Dial(configs.RabbitMQURL)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to RabbitMQ: %v", err)
+		panic(fmt.Errorf("failed to connect to RabbitMQ: %v", err))
 	}
 
 	ch, err := conn.Channel()
 	if err != nil {
-		return nil, fmt.Errorf("failed to open a channel: %v", err)
+		panic(fmt.Errorf("failed to open a channel: %v", err))
 	}
 
 	err = ch.Qos(
@@ -48,8 +52,13 @@ func ServiceRpc(serviceName string) (*Rpc, error) {
 	)
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to set QoS: %v", err)
+		panic(fmt.Errorf("failed to set QoS: %v", err))
 	}
+
+	ReplyQueueOnce.Do(func() {
+		replyQueueName = initReplyQueue(ch)
+		go consumeReplies(ch)
+	})
 
 	rpc := &Rpc{
 		serviceName:    serviceName,
@@ -57,24 +66,16 @@ func ServiceRpc(serviceName string) (*Rpc, error) {
 		amqpChannel:    ch,
 	}
 
-	if err := rpc.initReplyQueue(); err != nil {
-		rpc.Close()
-		return nil, err
-	}
-
-	// Start a single goroutine to consume messages from the reply queue
-	go rpc.consumeReplies()
-
-	return rpc, nil
+	return rpc
 }
 
 // initReplyQueue initializes the reply queue for the specific service.
-func (r *Rpc) initReplyQueue() error {
-	r.replyQueueID = uuid.New().String()
-	r.replyQueueName = fmt.Sprintf(RpcReplyQueueTemplate, configs.ServiceName, r.replyQueueID)
+func initReplyQueue(ch *amqp.Channel) string {
+	replyQueueID = uuid.New().String()
+	replyQueueName = fmt.Sprintf(RpcReplyQueueTemplate, configs.ServiceName, replyQueueID)
 
-	replyQueue, err := r.amqpChannel.QueueDeclare(
-		r.replyQueueName,
+	replyQueue, err := ch.QueueDeclare(
+		replyQueueName,
 		true,
 		false,
 		false,
@@ -83,20 +84,46 @@ func (r *Rpc) initReplyQueue() error {
 	)
 
 	if err != nil {
-		return fmt.Errorf("failed to declare reply queue: %v", err)
+		panic(fmt.Errorf("failed to declare shared reply queue: %v", err))
 	}
 
-	err = r.amqpChannel.QueueBind(
+	err = ch.QueueBind(
 		replyQueue.Name,
-		r.replyQueueID,
+		replyQueueID,
 		configs.ExchangeName,
 		false,
 		nil,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to bind reply queue: %v", err)
+		panic(fmt.Errorf("failed to bind reply queue: %v", err))
 	}
-	return nil
+
+	return replyQueueName
+}
+
+func consumeReplies(ch *amqp.Channel) {
+	messages, err := ch.Consume(
+		replyQueueName,
+		"",
+		false,
+		true,
+		false,
+		false,
+		nil,
+	)
+	if err != nil {
+		fmt.Printf("failed to consume messages: %v\n", err)
+		return
+	}
+
+	for msg := range messages {
+		if ch, ok := globalPendingReplies.Load(msg.CorrelationId); ok {
+			ch.(chan amqp.Delivery) <- msg // Send the message to the appropriate channel
+			_ = msg.Ack(false)             // Acknowledge the message
+		} else {
+			_ = msg.Nack(false, false) // No matching handler, discard the message
+		}
+	}
 }
 
 // CallRpc performs the RPC call for the specific service.
@@ -115,8 +142,8 @@ func (r *Rpc) CallRpc(methodName string, args interface{}) (*RPCResponse, error)
 
 	// Create a channel to wait for the response
 	replyChan := make(chan amqp.Delivery, 1)
-	r.pendingReplies.Store(correlationID, replyChan)
-	defer r.pendingReplies.Delete(correlationID)
+	globalPendingReplies.Store(correlationID, replyChan)
+	defer globalPendingReplies.Delete(correlationID)
 
 	// Publish the RPC request
 	err = r.amqpChannel.Publish(
@@ -127,7 +154,7 @@ func (r *Rpc) CallRpc(methodName string, args interface{}) (*RPCResponse, error)
 		amqp.Publishing{
 			ContentType:   "application/json",
 			CorrelationId: correlationID,
-			ReplyTo:       r.replyQueueID,
+			ReplyTo:       replyQueueID,
 			Body:          body,
 		},
 	)
@@ -156,31 +183,6 @@ func (r *Rpc) CallRpc(methodName string, args interface{}) (*RPCResponse, error)
 		}
 
 		return &RPCResponse{Result: response.Result}, nil
-	}
-}
-
-func (r *Rpc) consumeReplies() {
-	messages, err := r.amqpChannel.Consume(
-		r.replyQueueName,
-		"",
-		false,
-		true,
-		false,
-		false,
-		nil,
-	)
-	if err != nil {
-		fmt.Printf("failed to consume messages: %v\n", err)
-		return
-	}
-
-	for msg := range messages {
-		if ch, ok := r.pendingReplies.Load(msg.CorrelationId); ok {
-			ch.(chan amqp.Delivery) <- msg // Send the message to the appropriate channel
-			_ = msg.Ack(false)             // Acknowledge the message
-		} else {
-			_ = msg.Nack(false, false) // No matching handler, discard the message
-		}
 	}
 }
 
