@@ -25,7 +25,7 @@ func main() {
 	fmt.Println(response, err)
 
 	server.Get("/health", func(ctx *fasthttp.RequestCtx) { ctx.WriteString("OK") })
-	server.Get("/auth-health", AuthHealthHandler(authRpc))
+	server.Get("/auth-health", AuthHealthHandler(authRpc), LoggingMiddleware)
 
 	select {}
 

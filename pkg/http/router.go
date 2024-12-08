@@ -5,10 +5,21 @@ import (
 	"strings"
 )
 
+type Router interface {
+	Add(methods []string, path string, handler Handler, middleware ...Handler) Router
+
+	Get(path string, handler Handler, middleware ...Handler) Router
+	Post(path string, handler Handler, middleware ...Handler) Router
+	Put(path string, handler Handler, middleware ...Handler) Router
+	Delete(path string, handler Handler, middleware ...Handler) Router
+	Patch(path string, handler Handler, middleware ...Handler) Router
+}
+
 type Route struct {
-	Methods []string
-	Path    string
-	Handler Handler
+	Methods    []string
+	Path       string
+	Handler    Handler
+	Middleware []Handler // Middleware handlers
 }
 
 // matchRoute checks if the incoming request matches a registered route
