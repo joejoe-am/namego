@@ -11,13 +11,26 @@ func main() {
 	const name = "joe"
 
 	authRpc, err := rpc.ServiceRpc("authnzng")
+	if err != nil {
+		panic(err)
+	}
+
+	quotaRpc, err := rpc.ServiceRpc("quota")
 
 	if err != nil {
 		panic(err)
 	}
 
-	response, err := authRpc.CallRpc("joe", map[string]string{})
+	response, err := authRpc.CallRpc("health_check", map[string]string{})
 	fmt.Println(response, err)
+
+	response, err = quotaRpc.CallRpc("health_check", map[string]string{})
+	fmt.Println(response, err)
+
+	response, err = authRpc.CallRpc("joe", map[string]string{})
+	fmt.Println(response, err)
+
+	//select {}
 
 	//rpcServer, err := rpc.NewRpcServer(name)
 	//
