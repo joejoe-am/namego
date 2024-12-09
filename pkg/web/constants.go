@@ -1,4 +1,4 @@
-package http
+package web
 
 // HTTP methods were copied from net/http.
 const (

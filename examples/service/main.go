@@ -2,15 +2,15 @@ package main
 
 import (
 	"fmt"
-	"github.com/joejoe-am/namego/pkg/http"
 	"github.com/joejoe-am/namego/pkg/rpc"
+	"github.com/joejoe-am/namego/pkg/web"
 	"github.com/valyala/fasthttp"
 )
 
 // TODO: change package name
 
 func main() {
-	server := http.New()
+	server := web.New()
 	rpcServer := rpc.NewRpcServer("nameko")
 
 	authRpc := rpc.ServiceRpc("authnzng")

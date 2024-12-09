@@ -3,12 +3,12 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/joejoe-am/namego/pkg/http"
 	"github.com/joejoe-am/namego/pkg/rpc"
+	"github.com/joejoe-am/namego/pkg/web"
 	"github.com/valyala/fasthttp"
 )
 
-func AuthHealthHandler(authRpc *rpc.Rpc) http.Handler {
+func AuthHealthHandler(authRpc *rpc.Rpc) web.Handler {
 	return func(ctx *fasthttp.RequestCtx) {
 		response, err := authRpc.CallRpc("health_check", map[string]string{})
 		if err != nil {
