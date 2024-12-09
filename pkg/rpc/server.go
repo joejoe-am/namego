@@ -8,15 +8,15 @@ import (
 	"strings"
 )
 
-type RpcServer struct {
+type Server struct {
 	serviceName    string
 	amqpConnection *amqp.Connection
 	amqpChannel    *amqp.Channel
 	methods        map[string]func(args interface{}, kwargs map[string]interface{}) (interface{}, error)
 }
 
-// NewRpcServer initializes and returns an RpcServer instance.
-func NewRpcServer(serviceName string) *RpcServer {
+// NewRpcServer initializes and returns a Server instance.
+func NewRpcServer(serviceName string) *Server {
 	conn, err := amqp.Dial(configs.RabbitMQURL)
 	if err != nil {
 		panic(fmt.Errorf("failed to connect to RabbitMQ: %v", err))
@@ -27,7 +27,7 @@ func NewRpcServer(serviceName string) *RpcServer {
 		panic(fmt.Errorf("failed to open a channel: %v", err))
 	}
 
-	return &RpcServer{
+	return &Server{
 		serviceName:    serviceName,
 		amqpConnection: conn,
 		amqpChannel:    ch,
@@ -36,12 +36,12 @@ func NewRpcServer(serviceName string) *RpcServer {
 }
 
 // RegisterMethod registers an RPC method with the server.
-func (r *RpcServer) RegisterMethod(methodName string, handler func(args interface{}, kwargs map[string]interface{}) (interface{}, error)) {
+func (r *Server) RegisterMethod(methodName string, handler func(args interface{}, kwargs map[string]interface{}) (interface{}, error)) {
 	r.methods[methodName] = handler
 }
 
 // Start begins listening for RPC requests on the service's queue.
-func (r *RpcServer) Start() {
+func (r *Server) Start() {
 	queueName := fmt.Sprintf(RpcQueueTemplate, r.serviceName)
 	routingKey := fmt.Sprintf("%s.*", r.serviceName)
 
@@ -87,7 +87,7 @@ func (r *RpcServer) Start() {
 }
 
 // handleRequest processes incoming messages and invokes the appropriate handler.
-func (r *RpcServer) handleRequest(msg amqp.Delivery) {
+func (r *Server) handleRequest(msg amqp.Delivery) {
 	routingKeyParts := strings.Split(msg.RoutingKey, ".")
 	if len(routingKeyParts) != 2 {
 		r.sendResponse(
@@ -123,8 +123,8 @@ func (r *RpcServer) handleRequest(msg amqp.Delivery) {
 }
 
 // sendResponse sends a response back to the caller.
-func (r *RpcServer) sendResponse(replyTo, correlationID string, result interface{}, err error) {
-	var response RPCResponse
+func (r *Server) sendResponse(replyTo, correlationID string, result interface{}, err error) {
+	var response Response
 
 	if err != nil {
 		response.Error = &struct {
@@ -168,7 +168,7 @@ func (r *RpcServer) sendResponse(replyTo, correlationID string, result interface
 }
 
 // Close gracefully shuts down the server.
-func (r *RpcServer) Close() {
+func (r *Server) Close() {
 	if r.amqpChannel != nil {
 		_ = r.amqpChannel.Close()
 	}

@@ -13,8 +13,9 @@ func main() {
 	server := web.New()
 	rpcServer := rpc.NewRpcServer("nameko")
 
-	authRpc := rpc.ServiceRpc("authnzng")
-	quotaRpc := rpc.ServiceRpc("quota")
+	rpcClient := rpc.NewClient()
+	authRpc := rpcClient.TargetService("authnzng")
+	quotaRpc := rpcClient.TargetService("quota")
 
 	response, err := authRpc.CallRpc("joe", map[string]string{})
 	fmt.Println(response, err)
@@ -27,28 +28,12 @@ func main() {
 
 	rpcServer.RegisterMethod("multiply", Multiply)
 
+	go func() {
+		fmt.Println("Server running on :8080")
+		if err := server.Listen(":8080"); err != nil {
+			panic(fmt.Sprintf("Error starting server: %v\n", err))
+		}
+	}()
+
 	rpcServer.Start()
-
-	select {}
-
-	//rpcServer, err := rpc.NewRpcServer(name)
-	//
-	//if err != nil {
-	//	panic(err)
-	//}
-	//
-	//rpcServer.RegisterMethod("Multiply", Multiply)
-
-	//if err := rpcServer.Start(); err != nil {
-	//	log.Fatalf("Failed to start RPC server: %v", err)
-	//}
-
-	//
-	//// TODO: this should be a run method that start the whole application
-	//
-	//stop := make(chan os.Signal, 1)
-	//signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
-	//<-stop
-	//
-	//fmt.Println("Shutting down server...")
 }

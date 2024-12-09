@@ -8,7 +8,7 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
-func AuthHealthHandler(authRpc *rpc.Rpc) web.Handler {
+func AuthHealthHandler(authRpc *rpc.Client) web.Handler {
 	return func(ctx *fasthttp.RequestCtx) {
 		response, err := authRpc.CallRpc("health_check", map[string]string{})
 		if err != nil {

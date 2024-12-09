@@ -1,7 +1,6 @@
 package web
 
 import (
-	"fmt"
 	"github.com/valyala/fasthttp"
 )
 
@@ -24,16 +23,6 @@ func New(config ...Config) *Http {
 	}
 
 	http.init()
-
-	// handle the thread kill
-	// think of a better way.
-
-	go func() {
-		fmt.Println("Server running on :8080")
-		if err := http.Listen(":8080"); err != nil {
-			fmt.Println("Error starting server: %v", err)
-		}
-	}()
 
 	return http
 }
