@@ -11,14 +11,12 @@ import (
 
 func main() {
 	server := http.New()
+	rpcServer := rpc.NewRpcServer("nameko")
 
 	authRpc := rpc.ServiceRpc("authnzng")
 	quotaRpc := rpc.ServiceRpc("quota")
 
-	response, err := authRpc.CallRpc("health_check", map[string]string{})
-	fmt.Println(response, err)
-
-	response, err = authRpc.CallRpc("joe", map[string]string{})
+	response, err := authRpc.CallRpc("joe", map[string]string{})
 	fmt.Println(response, err)
 
 	response, err = quotaRpc.CallRpc("health_check", map[string]string{})
@@ -26,6 +24,10 @@ func main() {
 
 	server.Get("/health", func(ctx *fasthttp.RequestCtx) { ctx.WriteString("OK") })
 	server.Get("/auth-health", AuthHealthHandler(authRpc), LoggingMiddleware)
+
+	rpcServer.RegisterMethod("multiply", Multiply)
+
+	rpcServer.Start()
 
 	select {}
 

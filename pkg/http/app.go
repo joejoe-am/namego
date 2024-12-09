@@ -3,7 +3,6 @@ package http
 import (
 	"fmt"
 	"github.com/valyala/fasthttp"
-	"sync"
 )
 
 // Handler returns the server handler.
@@ -11,7 +10,6 @@ type Handler func(ctx *fasthttp.RequestCtx)
 
 type Http struct {
 	server *fasthttp.Server
-	mutex  sync.Mutex
 	routes []Route
 }
 
@@ -41,17 +39,11 @@ func New(config ...Config) *Http {
 }
 
 func (http *Http) init() *Http {
-	// lock application
-	http.mutex.Lock()
-
-	// create fasthttp server
 	http.server = &fasthttp.Server{}
 
 	// fasthttp server settings
 	http.server.Handler = http.Handler()
 
-	// unlock application
-	http.mutex.Unlock()
 	return http
 }
 
