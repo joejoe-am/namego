@@ -9,6 +9,11 @@ import (
 	"sync"
 )
 
+const (
+	RpcReplyQueueTemplate = "rpc.reply-%s-%s"
+	RpcReplyQueueTtl      = 300000 // ms (5 min)
+)
+
 var (
 	amqpChannel    *amqp.Channel
 	replyQueueName string

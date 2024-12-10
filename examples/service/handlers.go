@@ -8,6 +8,12 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
+// HTTP HANDLERS
+
+func HealthHandler(ctx *fasthttp.RequestCtx) {
+	ctx.WriteString("OK")
+}
+
 func AuthHealthHandler(authRpc *rpc.Client) web.Handler {
 	return func(ctx *fasthttp.RequestCtx) {
 		response, err := authRpc.CallRpc("health_check", map[string]string{})
@@ -37,6 +43,8 @@ func AuthHealthHandler(authRpc *rpc.Client) web.Handler {
 	}
 }
 
+// RPC  HANDLERS
+
 // Multiply is an example handler for your RPC server.
 func Multiply(args interface{}, kwargs map[string]interface{}) (interface{}, error) {
 	argsList, ok := args.([]interface{})
@@ -59,4 +67,11 @@ func Multiply(args interface{}, kwargs map[string]interface{}) (interface{}, err
 	}
 
 	return product, nil
+}
+
+// EVENT HANDLERS
+
+func eventHandlerFunction(body []byte) error {
+	fmt.Printf("Received event: %s\n", string(body))
+	return nil
 }

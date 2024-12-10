@@ -8,6 +8,10 @@ import (
 	"strings"
 )
 
+const (
+	RpcQueueTemplate = "rpc-%s"
+)
+
 type Server struct {
 	serviceName    string
 	amqpConnection *amqp.Connection

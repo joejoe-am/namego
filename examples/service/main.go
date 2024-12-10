@@ -5,28 +5,20 @@ import (
 	"github.com/joejoe-am/namego/configs"
 	"github.com/joejoe-am/namego/pkg/rpc"
 	"github.com/joejoe-am/namego/pkg/web"
-	amqp "github.com/rabbitmq/amqp091-go"
-	"github.com/valyala/fasthttp"
 	"log"
 )
 
 // TODO: change package name
 
 func main() {
-	amqpConnection, err := amqp.Dial(configs.RabbitMQURL)
+	amqpConnection := InitRabbitMQ(configs.RabbitMQURL)
+	defer amqpConnection.Close()
+
+	authRpc, quotaRpc, err := SetupRPCClients(amqpConnection)
 
 	if err != nil {
-		log.Fatalf("failed to establish RabbitMQ connection: %v", err)
+		log.Fatalf("failed to initialize RPC clients: %v", err)
 	}
-
-	err = rpc.InitClient(amqpConnection)
-
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	authRpc := rpc.NewClient("authnzng")
-	quotaRpc := rpc.NewClient("quota")
 
 	response, err := authRpc.CallRpc("health_check", map[string]string{})
 	fmt.Println(response, err)
@@ -35,25 +27,35 @@ func main() {
 	fmt.Println(response, err)
 
 	server := web.New()
-
-	server.Get("/health", func(ctx *fasthttp.RequestCtx) { ctx.WriteString("OK") })
+	server.Get("/health", HealthHandler)
 	server.Get("/auth-health", AuthHealthHandler(authRpc), LoggingMiddleware)
 
 	rpcServer := rpc.NewServer("nameko", amqpConnection)
-
 	rpcServer.RegisterMethod("multiply", Multiply)
 
-	go func() {
-		fmt.Println("Server running on :8080")
-		if err := server.Listen(":8080"); err != nil {
-			log.Fatalf("Error starting server: %v\n", err)
-		}
-	}()
-
-	err = rpcServer.Start()
-
-	if err != nil {
-		log.Fatal(err)
+	handlerConfig := rpc.EventConfig{
+		SourceService:    "authnzng",
+		EventType:        "EVENT_EXAMPLE",
+		HandlerType:      rpc.ServicePool,
+		ReliableDelivery: true,
+		HandlerFunction:  eventHandlerFunction,
 	}
 
+	eventHandler, err := rpc.NewEventHandler(handlerConfig, amqpConnection)
+	if err != nil {
+		log.Fatalf("failed to create event handler: %v", err)
+	}
+
+	err = eventHandler.SetupQueue()
+	if err != nil {
+		log.Fatalf("failed to setup queue: %v", err)
+	}
+
+	err = eventHandler.Start()
+	if err != nil {
+		log.Fatalf("failed to start event handler: %v", err)
+	}
+
+	app := NewApp(rpcServer, server)
+	app.Run()
 }
