@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"github.com/joejoe-am/namego/configs"
+	"github.com/joejoe-am/namego/examples/example-service/gateway"
+	"github.com/joejoe-am/namego/examples/example-service/service"
 	"github.com/joejoe-am/namego/pkg/rpc"
 	"github.com/joejoe-am/namego/pkg/web"
 	"log"
@@ -27,18 +29,18 @@ func main() {
 	fmt.Println(response, err)
 
 	server := web.New()
-	server.Get("/health", HealthHandler)
-	server.Get("/auth-health", AuthHealthHandler(authRpc), LoggingMiddleware)
+	server.Get("/health", gateway.HealthHandler)
+	server.Get("/auth-health", gateway.AuthHealthHandler(authRpc), LoggingMiddleware)
 
 	rpcServer := rpc.NewServer("nameko", amqpConnection)
-	rpcServer.RegisterMethod("multiply", Multiply)
+	rpcServer.RegisterMethod("multiply", service.Multiply)
 
 	handlerConfig := rpc.EventConfig{
 		SourceService:    "authnzng",
 		EventType:        "EVENT_EXAMPLE",
 		HandlerType:      rpc.ServicePool,
 		ReliableDelivery: true,
-		HandlerFunction:  eventHandlerFunction,
+		HandlerFunction:  service.EventHandlerFunction,
 	}
 
 	eventHandler, err := rpc.NewEventHandler(handlerConfig, amqpConnection)
