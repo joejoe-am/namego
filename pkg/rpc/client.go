@@ -10,7 +10,6 @@ import (
 )
 
 var (
-	amqpConnection *amqp.Connection
 	amqpChannel    *amqp.Channel
 	replyQueueName string
 	replyQueueID   string
@@ -34,17 +33,18 @@ type Response struct {
 	} `json:"error"`
 }
 
-func NewClient() *Client {
-	var err error
-
-	amqpConnection, err = amqp.Dial(configs.RabbitMQURL)
-	if err != nil {
-		panic(fmt.Errorf("failed to connect to RabbitMQ: %v", err))
+func NewClient(serviceName string) *Client {
+	return &Client{
+		targetService: serviceName,
 	}
+}
+
+func InitClient(amqpConnection *amqp.Connection) error {
+	var err error
 
 	amqpChannel, err = amqpConnection.Channel()
 	if err != nil {
-		panic(fmt.Errorf("failed to open a channel: %v", err))
+		return fmt.Errorf("error creating amqp channel: %v", err)
 	}
 
 	err = amqpChannel.Qos(
@@ -52,22 +52,18 @@ func NewClient() *Client {
 		0,
 		false,
 	)
-
 	if err != nil {
-		panic(fmt.Errorf("failed to set QoS: %v", err))
+		return fmt.Errorf("error setting Qos: %s", err)
 	}
 
-	setupReplyQueue()
+	err = setupReplyQueue()
+	if err != nil {
+		return err
+	}
 
 	go consumeReplies()
 
-	return &Client{}
-}
-
-// TargetService specifies the service name for the client.
-func (c *Client) TargetService(serviceName string) *Client {
-	c.targetService = serviceName
-	return c
+	return nil
 }
 
 // CallRpc performs the RPC call for the specific service.
@@ -131,7 +127,7 @@ func (c *Client) CallRpc(methodName string, args interface{}) (*Response, error)
 }
 
 // Sets up the reply queue for receiving RPC responses.
-func setupReplyQueue() {
+func setupReplyQueue() error {
 	replyQueueID = uuid.New().String()
 	replyQueueName = fmt.Sprintf(RpcReplyQueueTemplate, configs.ServiceName, replyQueueID)
 
@@ -144,7 +140,7 @@ func setupReplyQueue() {
 		amqp.Table{"x-expires": int32(RpcReplyQueueTtl)},
 	)
 	if err != nil {
-		panic(fmt.Errorf("failed to declare reply queue: %w", err))
+		return fmt.Errorf("failed to declare reply queue: %w", err)
 	}
 
 	err = amqpChannel.QueueBind(
@@ -155,11 +151,13 @@ func setupReplyQueue() {
 		nil,
 	)
 	if err != nil {
-		panic(fmt.Errorf("failed to bind reply queue: %w", err))
+		return fmt.Errorf("failed to bind reply queue: %w", err)
 	}
+
+	return nil
 }
 
-// Consumes messages from the reply queue and routes them to the appropriate handlers.
+// consumeReplies Consumes messages from the reply queue and routes them to the appropriate handlers.
 func consumeReplies() {
 	messages, err := amqpChannel.Consume(
 		replyQueueName,

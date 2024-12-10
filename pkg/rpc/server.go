@@ -15,37 +15,34 @@ type Server struct {
 	methods        map[string]func(args interface{}, kwargs map[string]interface{}) (interface{}, error)
 }
 
-// NewRpcServer initializes and returns a Server instance.
-func NewRpcServer(serviceName string) *Server {
-	conn, err := amqp.Dial(configs.RabbitMQURL)
-	if err != nil {
-		panic(fmt.Errorf("failed to connect to RabbitMQ: %v", err))
-	}
-
-	ch, err := conn.Channel()
-	if err != nil {
-		panic(fmt.Errorf("failed to open a channel: %v", err))
-	}
-
+// NewServer initializes and returns a Server instance.
+func NewServer(serviceName string, amqpConnection *amqp.Connection) *Server {
 	return &Server{
 		serviceName:    serviceName,
-		amqpConnection: conn,
-		amqpChannel:    ch,
+		amqpConnection: amqpConnection,
 		methods:        make(map[string]func(args interface{}, kwargs map[string]interface{}) (interface{}, error)),
 	}
 }
 
 // RegisterMethod registers an RPC method with the server.
-func (r *Server) RegisterMethod(methodName string, handler func(args interface{}, kwargs map[string]interface{}) (interface{}, error)) {
-	r.methods[methodName] = handler
+func (s *Server) RegisterMethod(methodName string, handler func(args interface{}, kwargs map[string]interface{}) (interface{}, error)) {
+	s.methods[methodName] = handler
 }
 
 // Start begins listening for RPC requests on the service's queue.
-func (r *Server) Start() {
-	queueName := fmt.Sprintf(RpcQueueTemplate, r.serviceName)
-	routingKey := fmt.Sprintf("%s.*", r.serviceName)
+func (s *Server) Start() error {
+	var err error
 
-	_, err := r.amqpChannel.QueueDeclare(
+	queueName := fmt.Sprintf(RpcQueueTemplate, s.serviceName)
+	routingKey := fmt.Sprintf("%s.*", s.serviceName)
+
+	s.amqpChannel, err = s.amqpConnection.Channel()
+
+	if err != nil {
+		return fmt.Errorf("error creating amqp channel: %v", err)
+	}
+
+	_, err = s.amqpChannel.QueueDeclare(
 		queueName,
 		true,
 		false,
@@ -53,11 +50,12 @@ func (r *Server) Start() {
 		false,
 		nil,
 	)
+
 	if err != nil {
-		panic(fmt.Errorf("failed to declare RPC queue: %v", err))
+		return fmt.Errorf("failed to declare RPC queue: %v", err)
 	}
 
-	err = r.amqpChannel.QueueBind(
+	err = s.amqpChannel.QueueBind(
 		queueName,
 		routingKey,
 		configs.ExchangeName,
@@ -65,10 +63,10 @@ func (r *Server) Start() {
 		nil,
 	)
 	if err != nil {
-		panic(fmt.Errorf("failed to bind RPC queue: %v", err))
+		return fmt.Errorf("failed to bind RPC queue: %v", err)
 	}
 
-	msgs, err := r.amqpChannel.Consume(
+	msgs, err := s.amqpChannel.Consume(
 		queueName,
 		"",
 		true,
@@ -78,19 +76,21 @@ func (r *Server) Start() {
 		nil,
 	)
 	if err != nil {
-		panic(fmt.Errorf("failed to consume messages: %v", err))
+		return fmt.Errorf("failed to consume messages: %v", err)
 	}
 
 	for msg := range msgs {
-		go r.handleRequest(msg)
+		go s.handleRequest(msg)
 	}
+
+	return nil
 }
 
 // handleRequest processes incoming messages and invokes the appropriate handler.
-func (r *Server) handleRequest(msg amqp.Delivery) {
+func (s *Server) handleRequest(msg amqp.Delivery) {
 	routingKeyParts := strings.Split(msg.RoutingKey, ".")
 	if len(routingKeyParts) != 2 {
-		r.sendResponse(
+		s.sendResponse(
 			msg.ReplyTo,
 			msg.CorrelationId,
 			nil, fmt.Errorf("invalid routing key: %s", msg.RoutingKey),
@@ -105,25 +105,25 @@ func (r *Server) handleRequest(msg amqp.Delivery) {
 	}
 
 	if err := json.Unmarshal(msg.Body, &request); err != nil {
-		r.sendResponse(msg.ReplyTo, msg.CorrelationId, nil, fmt.Errorf("invalid request: %v", err))
+		s.sendResponse(msg.ReplyTo, msg.CorrelationId, nil, fmt.Errorf("invalid request: %v", err))
 		return
 	}
 
-	handler, exists := r.methods[methodName]
+	handler, exists := s.methods[methodName]
 
 	if !exists {
-		r.sendResponse(msg.ReplyTo, msg.CorrelationId, nil, fmt.Errorf("method not found: %s", methodName))
+		s.sendResponse(msg.ReplyTo, msg.CorrelationId, nil, fmt.Errorf("method not found: %s", methodName))
 		return
 	}
 
 	// TODO: handle the kwargs
 
 	result, err := handler(request.Args, request.Kwargs)
-	r.sendResponse(msg.ReplyTo, msg.CorrelationId, result, err)
+	s.sendResponse(msg.ReplyTo, msg.CorrelationId, result, err)
 }
 
 // sendResponse sends a response back to the caller.
-func (r *Server) sendResponse(replyTo, correlationID string, result interface{}, err error) {
+func (s *Server) sendResponse(replyTo, correlationID string, result interface{}, err error) {
 	var response Response
 
 	if err != nil {
@@ -151,7 +151,7 @@ func (r *Server) sendResponse(replyTo, correlationID string, result interface{},
 		return
 	}
 
-	err = r.amqpChannel.Publish(
+	err = s.amqpChannel.Publish(
 		configs.ExchangeName,
 		replyTo,
 		false,
@@ -164,15 +164,5 @@ func (r *Server) sendResponse(replyTo, correlationID string, result interface{},
 	)
 	if err != nil {
 		fmt.Printf("failed to send response: %v\n", err)
-	}
-}
-
-// Close gracefully shuts down the server.
-func (r *Server) Close() {
-	if r.amqpChannel != nil {
-		_ = r.amqpChannel.Close()
-	}
-	if r.amqpConnection != nil {
-		_ = r.amqpConnection.Close()
 	}
 }
