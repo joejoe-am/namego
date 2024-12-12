@@ -71,15 +71,22 @@ func (s *Server) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to bind RPC queue: %v", err)
 	}
 
+	err = s.amqpChannel.Qos(
+		3,
+		0,
+		false,
+	)
+
 	msgs, err := s.amqpChannel.Consume(
 		queueName,
 		"",
-		true,
+		false,
 		false,
 		false,
 		false,
 		nil,
 	)
+
 	if err != nil {
 		return fmt.Errorf("failed to consume messages: %v", err)
 	}
@@ -93,6 +100,8 @@ func (s *Server) Start(ctx context.Context) error {
 
 // handleRequest processes incoming messages and invokes the appropriate handler.
 func (s *Server) handleRequest(msg amqp.Delivery) {
+	defer msg.Ack(false)
+
 	routingKeyParts := strings.Split(msg.RoutingKey, ".")
 	if len(routingKeyParts) != 2 {
 		s.sendResponse(

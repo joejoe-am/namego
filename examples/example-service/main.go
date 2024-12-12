@@ -74,6 +74,7 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		fmt.Println("starting http server on :8080")
 		if err := server.Listen(":8080"); err != nil {
 			log.Printf("Web server error: %v", err)
 			cancel()
@@ -83,6 +84,7 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		fmt.Println("starting rpc server")
 		if err := rpcServer.Start(ctx); err != nil {
 			log.Printf("RPC server error: %v", err)
 			cancel()
