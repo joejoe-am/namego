@@ -159,11 +159,9 @@ func (h *EventHandler) Start() error {
 		return fmt.Errorf("failed to consume messages: %v", err)
 	}
 
-	go func() {
-		for msg := range msgs {
-			h.handleMessage(msg)
-		}
-	}()
+	for msg := range msgs {
+		go h.handleMessage(msg)
+	}
 
 	return nil
 }

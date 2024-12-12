@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"github.com/joejoe-am/namego/configs"
 	"github.com/joejoe-am/namego/examples/example-service/gateway"
@@ -8,11 +9,23 @@ import (
 	"github.com/joejoe-am/namego/pkg/rpc"
 	"github.com/joejoe-am/namego/pkg/web"
 	"log"
+	"os"
+	"os/signal"
+	"sync"
+	"syscall"
 )
 
 // TODO: change package name
 
 func main() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	signalChan := make(chan os.Signal, 1)
+	signal.Notify(signalChan, os.Interrupt, syscall.SIGTERM)
+
+	var wg sync.WaitGroup
+
 	amqpConnection := InitRabbitMQ(configs.RabbitMQURL)
 	defer amqpConnection.Close()
 
@@ -30,34 +43,74 @@ func main() {
 
 	server := web.New()
 	server.Get("/health", gateway.HealthHandler)
-	server.Get("/auth-health", gateway.AuthHealthHandler(authRpc), LoggingMiddleware)
+	server.Get("/auth-health", gateway.AuthHealthHandler(authRpc), gateway.LoggingMiddleware)
 
 	rpcServer := rpc.NewServer("nameko", amqpConnection)
 	rpcServer.RegisterMethod("multiply", service.Multiply)
 
-	handlerConfig := rpc.EventConfig{
-		SourceService:    "authnzng",
-		EventType:        "EVENT_EXAMPLE",
-		HandlerType:      rpc.ServicePool,
-		ReliableDelivery: true,
-		HandlerFunction:  service.EventHandlerFunction,
+	//handlerConfig := rpc.EventConfig{
+	//	SourceService:    "authnzng",
+	//	EventType:        "EVENT_EXAMPLE",
+	//	HandlerType:      rpc.ServicePool,
+	//	ReliableDelivery: true,
+	//	HandlerFunction:  service.EventHandlerFunction,
+	//}
+	//
+	//eventHandler, err := rpc.NewEventHandler(handlerConfig, amqpConnection)
+	//if err != nil {
+	//	log.Fatalf("failed to create event handler: %v", err)
+	//}
+	//
+	//err = eventHandler.SetupQueue()
+	//if err != nil {
+	//	log.Fatalf("failed to setup queue: %v", err)
+	//}
+	//
+	//err = eventHandler.Start()
+	//if err != nil {
+	//	log.Fatalf("failed to start event handler: %v", err)
+	//}
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := server.Listen(":8080"); err != nil {
+			log.Printf("Web server error: %v", err)
+			cancel()
+		}
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := rpcServer.Start(ctx); err != nil {
+			log.Printf("RPC server error: %v", err)
+			cancel()
+		}
+	}()
+
+	select {
+	case sig := <-signalChan:
+		log.Printf("Received signal: %v", sig)
+		cancel()
+	case <-ctx.Done():
 	}
 
-	eventHandler, err := rpc.NewEventHandler(handlerConfig, amqpConnection)
-	if err != nil {
-		log.Fatalf("failed to create event handler: %v", err)
-	}
+	//shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	//defer shutdownCancel()
+	//if err := server.Shutdown(shutdownCtx); err != nil {
+	//	log.Printf("Error shutting down web server: %v", err)
+	//}
+	//
+	//if err := rpcServer.Stop(); err != nil {
+	//	log.Printf("Error shutting down RPC server: %v", err)
+	//}
+	//
+	//if err := eventHandler.Close(); err != nil {
+	//	log.Printf("Error shutting down event handler: %v", err)
+	//}
+	//
+	//wg.Wait()
 
-	err = eventHandler.SetupQueue()
-	if err != nil {
-		log.Fatalf("failed to setup queue: %v", err)
-	}
-
-	err = eventHandler.Start()
-	if err != nil {
-		log.Fatalf("failed to start event handler: %v", err)
-	}
-
-	app := NewApp(rpcServer, server)
-	app.Run()
+	log.Println("Shutdown complete.")
 }

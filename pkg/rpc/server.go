@@ -1,6 +1,7 @@
 package rpc
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/joejoe-am/namego/configs"
@@ -34,7 +35,7 @@ func (s *Server) RegisterMethod(methodName string, handler func(args interface{}
 }
 
 // Start begins listening for RPC requests on the service's queue.
-func (s *Server) Start() error {
+func (s *Server) Start(ctx context.Context) error {
 	var err error
 
 	queueName := fmt.Sprintf(RpcQueueTemplate, s.serviceName)
