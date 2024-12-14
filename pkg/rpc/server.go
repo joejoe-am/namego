@@ -4,13 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/joejoe-am/namego/configs"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"strings"
-)
-
-const (
-	RpcQueueTemplate = "rpc-%s"
 )
 
 type Server struct {
@@ -63,7 +58,7 @@ func (s *Server) Start(ctx context.Context) error {
 	err = s.amqpChannel.QueueBind(
 		queueName,
 		routingKey,
-		configs.ExchangeName,
+		cfg.ExchangeName,
 		false,
 		nil,
 	)
@@ -180,7 +175,7 @@ func (s *Server) sendResponse(msg amqp.Delivery, result interface{}, err error) 
 	}
 
 	publishErr := s.amqpChannel.Publish(
-		configs.ExchangeName,
+		cfg.ExchangeName,
 		msg.ReplyTo,
 		false,
 		false,

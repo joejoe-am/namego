@@ -3,18 +3,11 @@ package rpc
 import (
 	"fmt"
 	"github.com/google/uuid"
-	"github.com/joejoe-am/namego/configs"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 type HandlerType string
 type EventHandlerType func(body []byte) error
-
-const (
-	EventHandlerBroadCaseQueueTemplate     = "evt-%s-%s--%s.%s-%s"
-	EventHandlerSingletonCaseQueueTemplate = "evt-%s-%s"
-	EventHandlerServicePoolQueueTemplate   = "evt-%s-%s--%s.%s"
-)
 
 const (
 	ServicePool HandlerType = "SERVICE_POOL"
@@ -43,39 +36,39 @@ type EventHandler struct {
 	handlers   map[string]func(body []byte) error // Map of event handlers
 }
 
-func generateQueueName(cfg EventConfig) (string, bool, bool) {
+func generateQueueName(eventCfg EventConfig) (string, bool, bool) {
 	var queueName string
 	exclusive := false
-	autoDelete := !cfg.ReliableDelivery
+	autoDelete := !eventCfg.ReliableDelivery
 
-	switch cfg.HandlerType {
+	switch eventCfg.HandlerType {
 	case ServicePool:
 		queueName = fmt.Sprintf(
 			EventHandlerServicePoolQueueTemplate,
-			cfg.SourceService,
-			cfg.EventType,
-			configs.ServiceName,
-			GetFunctionName(cfg.HandlerFunction),
+			eventCfg.SourceService,
+			eventCfg.EventType,
+			cfg.ServiceName,
+			GetFunctionName(eventCfg.HandlerFunction),
 		)
 	case Singleton:
 		queueName = fmt.Sprintf(
 			EventHandlerSingletonCaseQueueTemplate,
-			cfg.SourceService,
-			cfg.EventType,
+			eventCfg.SourceService,
+			eventCfg.EventType,
 		)
 	case Broadcast:
-		if cfg.BroadcastID == "" {
-			cfg.BroadcastID = uuid.New().String()
+		if eventCfg.BroadcastID == "" {
+			eventCfg.BroadcastID = uuid.New().String()
 		}
 		queueName = fmt.Sprintf(
 			EventHandlerBroadCaseQueueTemplate,
-			cfg.SourceService,
-			cfg.EventType,
-			configs.ServiceName,
-			GetFunctionName(cfg.HandlerFunction),
-			cfg.BroadcastID,
+			eventCfg.SourceService,
+			eventCfg.EventType,
+			cfg.ServiceName,
+			GetFunctionName(eventCfg.HandlerFunction),
+			eventCfg.BroadcastID,
 		)
-		exclusive = !cfg.ReliableDelivery
+		exclusive = !eventCfg.ReliableDelivery
 	}
 
 	return queueName, exclusive, autoDelete

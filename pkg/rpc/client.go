@@ -4,14 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/google/uuid"
-	"github.com/joejoe-am/namego/configs"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"sync"
-)
-
-const (
-	RpcReplyQueueTemplate = "rpc.reply-%s-%s"
-	RpcReplyQueueTtl      = 300000 // ms (5 min)
 )
 
 var (
@@ -92,7 +86,7 @@ func (c *Client) CallRpc(methodName string, args interface{}) (*Response, error)
 
 	// Publish the RPC request
 	err = amqpChannel.Publish(
-		configs.ExchangeName,
+		cfg.ExchangeName,
 		routingKey,
 		false,
 		false,
@@ -134,7 +128,7 @@ func (c *Client) CallRpc(methodName string, args interface{}) (*Response, error)
 // Sets up the reply queue for receiving RPC responses.
 func setupReplyQueue() error {
 	replyQueueID = uuid.New().String()
-	replyQueueName = fmt.Sprintf(RpcReplyQueueTemplate, configs.ServiceName, replyQueueID)
+	replyQueueName = fmt.Sprintf(RpcReplyQueueTemplate, cfg.ServiceName, replyQueueID)
 
 	replyQueue, err := amqpChannel.QueueDeclare(
 		replyQueueName,
@@ -151,7 +145,7 @@ func setupReplyQueue() error {
 	err = amqpChannel.QueueBind(
 		replyQueue.Name,
 		replyQueueID,
-		configs.ExchangeName,
+		cfg.ExchangeName,
 		false,
 		nil,
 	)

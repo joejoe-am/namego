@@ -18,6 +18,8 @@ import (
 // TODO: change package name
 
 func main() {
+	cfg := configs.GetConfigs()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -26,7 +28,7 @@ func main() {
 
 	var wg sync.WaitGroup
 
-	amqpConnection := InitRabbitMQ(configs.RabbitMQURL)
+	amqpConnection := InitRabbitMQ(cfg.RabbitMQURL)
 	defer amqpConnection.Close()
 
 	authRpc, quotaRpc, err := SetupRPCClients(amqpConnection)
