@@ -72,7 +72,7 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 
 	err = s.amqpChannel.Qos(
-		3,
+		2,
 		0,
 		false,
 	)
@@ -91,8 +91,16 @@ func (s *Server) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to consume messages: %v", err)
 	}
 
+	workerPool := make(chan struct{}, 2)
+
+	// TODO: handle worker pool better (worker pool pattern)
+
 	for msg := range msgs {
-		go s.handleRequest(msg)
+		workerPool <- struct{}{}
+		go func(m amqp.Delivery) {
+			defer func() { <-workerPool }()
+			s.handleRequest(m)
+		}(msg)
 	}
 
 	return nil
@@ -100,46 +108,54 @@ func (s *Server) Start(ctx context.Context) error {
 
 // handleRequest processes incoming messages and invokes the appropriate handler.
 func (s *Server) handleRequest(msg amqp.Delivery) {
-	defer msg.Ack(false)
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Printf("panic occurred: %v\n", r)
+			msg.Nack(false, true) // Requeue the message in case of panic
+		}
+	}()
 
+	err := s.processMessage(msg)
+	if err != nil {
+		fmt.Printf("error processing message: %v\n", err)
+	}
+
+	msg.Ack(false) // Acknowledge the message on success
+}
+
+// processMessage decodes and handles the message logic.
+func (s *Server) processMessage(msg amqp.Delivery) error {
+	// Validate routing key structure
 	routingKeyParts := strings.Split(msg.RoutingKey, ".")
 	if len(routingKeyParts) != 2 {
-		s.sendResponse(
-			msg.ReplyTo,
-			msg.CorrelationId,
-			nil, fmt.Errorf("invalid routing key: %s", msg.RoutingKey),
-		)
-		return
+		return s.sendResponse(msg, nil, fmt.Errorf("invalid routing key: %s", msg.RoutingKey))
 	}
-	methodName := routingKeyParts[1] // The second part is the method name
 
+	methodName := routingKeyParts[1] // Extract method name
+
+	// Parse the request body
 	var request struct {
 		Args   interface{}            `json:"args"`
 		Kwargs map[string]interface{} `json:"kwargs"`
 	}
-
 	if err := json.Unmarshal(msg.Body, &request); err != nil {
-		s.sendResponse(msg.ReplyTo, msg.CorrelationId, nil, fmt.Errorf("invalid request: %v", err))
-		return
+		return s.sendResponse(msg, nil, fmt.Errorf("invalid request: %v", err))
 	}
 
+	// Check if the handler exists
 	handler, exists := s.methods[methodName]
-
 	if !exists {
-		s.sendResponse(msg.ReplyTo, msg.CorrelationId, nil, fmt.Errorf("method not found: %s", methodName))
-		return
+		return s.sendResponse(msg, nil, fmt.Errorf("method not found: %s", methodName))
 	}
 
-	// TODO: handle the kwargs
-
+	// Invoke the handler
 	result, err := handler(request.Args, request.Kwargs)
-	s.sendResponse(msg.ReplyTo, msg.CorrelationId, result, err)
+	return s.sendResponse(msg, result, err)
 }
 
-// sendResponse sends a response back to the caller.
-func (s *Server) sendResponse(replyTo, correlationID string, result interface{}, err error) {
-	var response Response
-
+// sendResponse constructs and sends a success response.
+func (s *Server) sendResponse(msg amqp.Delivery, result interface{}, err error) error {
+	response := Response{}
 	if err != nil {
 		response.Error = &struct {
 			ExcType   string                 `json:"exc_type"`
@@ -158,25 +174,25 @@ func (s *Server) sendResponse(replyTo, correlationID string, result interface{},
 		response.Result = result
 	}
 
-	body, err := json.Marshal(response)
-
-	if err != nil {
-		fmt.Printf("failed to serialize response: %v\n", err)
-		return
+	body, marshalErr := json.Marshal(response)
+	if marshalErr != nil {
+		return fmt.Errorf("failed to serialize response: %v", marshalErr)
 	}
 
-	err = s.amqpChannel.Publish(
+	publishErr := s.amqpChannel.Publish(
 		configs.ExchangeName,
-		replyTo,
+		msg.ReplyTo,
 		false,
 		false,
 		amqp.Publishing{
 			ContentType:   "application/json",
-			CorrelationId: correlationID,
+			CorrelationId: msg.CorrelationId,
 			Body:          body,
 		},
 	)
-	if err != nil {
-		fmt.Printf("failed to send response: %v\n", err)
+	if publishErr != nil {
+		return fmt.Errorf("failed to send response: %v", publishErr)
 	}
+
+	return nil
 }

@@ -1,8 +1,12 @@
 package service
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
 func Multiply(args interface{}, kwargs map[string]interface{}) (interface{}, error) {
+	time.Sleep(10 * time.Second)
 	argsList, ok := args.([]interface{})
 	if !ok {
 		return nil, fmt.Errorf("invalid args: expected []interface{} but got %T", args)
