@@ -11,8 +11,8 @@ const (
 	EventHandlerServicePoolQueueTemplate   = "evt-%s-%s--%s.%s"
 )
 
-var cfg *configs.Configs
+var Cfg *configs.Configs
 
 func init() {
-	cfg = configs.GetConfigs()
+	Cfg = configs.GetConfigs()
 }

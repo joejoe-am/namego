@@ -86,7 +86,7 @@ func (c *Client) CallRpc(methodName string, args interface{}) (*Response, error)
 
 	// Publish the RPC request
 	err = amqpChannel.Publish(
-		cfg.ExchangeName,
+		Cfg.ExchangeName,
 		routingKey,
 		false,
 		false,
@@ -128,7 +128,7 @@ func (c *Client) CallRpc(methodName string, args interface{}) (*Response, error)
 // Sets up the reply queue for receiving RPC responses.
 func setupReplyQueue() error {
 	replyQueueID = uuid.New().String()
-	replyQueueName = fmt.Sprintf(RpcReplyQueueTemplate, cfg.ServiceName, replyQueueID)
+	replyQueueName = fmt.Sprintf(RpcReplyQueueTemplate, Cfg.ServiceName, replyQueueID)
 
 	replyQueue, err := amqpChannel.QueueDeclare(
 		replyQueueName,
@@ -145,7 +145,7 @@ func setupReplyQueue() error {
 	err = amqpChannel.QueueBind(
 		replyQueue.Name,
 		replyQueueID,
-		cfg.ExchangeName,
+		Cfg.ExchangeName,
 		false,
 		nil,
 	)

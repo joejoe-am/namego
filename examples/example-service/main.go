@@ -31,6 +31,7 @@ func main() {
 	amqpConnection := InitRabbitMQ(cfg.RabbitMQURL)
 	defer amqpConnection.Close()
 
+	// RPC client example
 	authRpc, quotaRpc, err := SetupRPCClients(amqpConnection)
 
 	if err != nil {
@@ -43,35 +44,35 @@ func main() {
 	response, err = quotaRpc.CallRpc("health_check", map[string]string{})
 	fmt.Println(response, err)
 
+	// HTTP server example
 	server := web.New()
 	server.Get("/health", gateway.HealthHandler)
 	server.Get("/auth-health", gateway.AuthHealthHandler(authRpc), gateway.LoggingMiddleware)
 
+	// RPC server example
 	rpcServer := rpc.NewServer("nameko", amqpConnection)
 	rpcServer.RegisterMethod("multiply", service.Multiply)
 
-	//handlerConfig := rpc.EventConfig{
+	//handlerConfig := events.EventConfig{
 	//	SourceService:    "authnzng",
 	//	EventType:        "EVENT_EXAMPLE",
-	//	HandlerType:      rpc.ServicePool,
+	//	HandlerType:      events.ServicePool,
 	//	ReliableDelivery: true,
 	//	HandlerFunction:  service.EventHandlerFunction,
 	//}
 	//
-	//eventHandler, err := rpc.NewEventHandler(handlerConfig, amqpConnection)
+	//eventHandler, err := events.NewEventHandler(handlerConfig)
 	//if err != nil {
 	//	log.Fatalf("failed to create event handler: %v", err)
 	//}
 	//
-	//err = eventHandler.SetupQueue()
-	//if err != nil {
-	//	log.Fatalf("failed to setup queue: %v", err)
-	//}
-	//
-	//err = eventHandler.Start()
+	//err = eventHandler.Start(amqpConnection)
 	//if err != nil {
 	//	log.Fatalf("failed to start event handler: %v", err)
 	//}
+
+	// Dispatch event Example
+	service.DispatchEventExampleFunction(amqpConnection, cfg.ServiceName)
 
 	wg.Add(1)
 	go func() {

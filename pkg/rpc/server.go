@@ -58,7 +58,7 @@ func (s *Server) Start(ctx context.Context) error {
 	err = s.amqpChannel.QueueBind(
 		queueName,
 		routingKey,
-		cfg.ExchangeName,
+		Cfg.ExchangeName,
 		false,
 		nil,
 	)
@@ -175,7 +175,7 @@ func (s *Server) sendResponse(msg amqp.Delivery, result interface{}, err error) 
 	}
 
 	publishErr := s.amqpChannel.Publish(
-		cfg.ExchangeName,
+		Cfg.ExchangeName,
 		msg.ReplyTo,
 		false,
 		false,

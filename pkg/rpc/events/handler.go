@@ -1,8 +1,9 @@
-package rpc
+package events
 
 import (
 	"fmt"
 	"github.com/google/uuid"
+	"github.com/joejoe-am/namego/pkg/rpc"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
@@ -31,8 +32,6 @@ type EventHandler struct {
 	exclusive  bool
 	autoDelete bool
 	queue      *amqp.Queue
-	connection *amqp.Connection
-	channel    *amqp.Channel
 	handlers   map[string]func(body []byte) error // Map of event handlers
 }
 
@@ -44,15 +43,15 @@ func generateQueueName(eventCfg EventConfig) (string, bool, bool) {
 	switch eventCfg.HandlerType {
 	case ServicePool:
 		queueName = fmt.Sprintf(
-			EventHandlerServicePoolQueueTemplate,
+			rpc.EventHandlerServicePoolQueueTemplate,
 			eventCfg.SourceService,
 			eventCfg.EventType,
-			cfg.ServiceName,
-			GetFunctionName(eventCfg.HandlerFunction),
+			rpc.Cfg.ServiceName,
+			rpc.GetFunctionName(eventCfg.HandlerFunction),
 		)
 	case Singleton:
 		queueName = fmt.Sprintf(
-			EventHandlerSingletonCaseQueueTemplate,
+			rpc.EventHandlerSingletonCaseQueueTemplate,
 			eventCfg.SourceService,
 			eventCfg.EventType,
 		)
@@ -61,11 +60,11 @@ func generateQueueName(eventCfg EventConfig) (string, bool, bool) {
 			eventCfg.BroadcastID = uuid.New().String()
 		}
 		queueName = fmt.Sprintf(
-			EventHandlerBroadCaseQueueTemplate,
+			rpc.EventHandlerBroadCaseQueueTemplate,
 			eventCfg.SourceService,
 			eventCfg.EventType,
-			cfg.ServiceName,
-			GetFunctionName(eventCfg.HandlerFunction),
+			rpc.Cfg.ServiceName,
+			rpc.GetFunctionName(eventCfg.HandlerFunction),
 			eventCfg.BroadcastID,
 		)
 		exclusive = !eventCfg.ReliableDelivery
@@ -75,12 +74,7 @@ func generateQueueName(eventCfg EventConfig) (string, bool, bool) {
 }
 
 // NewEventHandler initializes a new event handler.
-func NewEventHandler(cfg EventConfig, conn *amqp.Connection) (*EventHandler, error) {
-	channel, err := conn.Channel()
-	if err != nil {
-		return nil, fmt.Errorf("failed to open RabbitMQ channel: %v", err)
-	}
-
+func NewEventHandler(cfg EventConfig) (*EventHandler, error) {
 	queueName, exclusive, autoDelete := generateQueueName(cfg)
 
 	return &EventHandler{
@@ -88,58 +82,23 @@ func NewEventHandler(cfg EventConfig, conn *amqp.Connection) (*EventHandler, err
 		queueName:  queueName,
 		exclusive:  exclusive,
 		autoDelete: autoDelete,
-		connection: conn,
-		channel:    channel,
 		handlers:   make(map[string]func(body []byte) error),
 	}, nil
 }
 
-func (h *EventHandler) SetupQueue() error {
-	exchange := fmt.Sprintf("%s.events", h.config.SourceService)
-
-	err := h.channel.ExchangeDeclare(
-		exchange,
-		"topic",
-		true,
-		true,
-		false,
-		false,
-		nil,
-	)
+func (h *EventHandler) Start(conn *amqp.Connection) error {
+	ch, err := conn.Channel()
 	if err != nil {
-		return fmt.Errorf("failed to declare exchange: %v", err)
+		return fmt.Errorf("failed to open RabbitMQ channel: %v", err)
 	}
 
-	queue, err := h.channel.QueueDeclare(
-		h.queueName,
-		true,
-		h.autoDelete,
-		h.exclusive,
-		false,
-		nil,
-	)
+	err = h.SetupQueue(ch)
+
 	if err != nil {
-		return fmt.Errorf("failed to declare queue: %v", err)
+		return err
 	}
 
-	h.queue = &queue
-
-	err = h.channel.QueueBind(
-		h.queueName,
-		h.config.EventType,
-		exchange,
-		false,
-		nil,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to bind queue: %v", err)
-	}
-
-	return nil
-}
-
-func (h *EventHandler) Start() error {
-	msgs, err := h.channel.Consume(
+	msgs, err := ch.Consume(
 		h.queueName,
 		"",
 		!h.config.RequeueOnError,
@@ -154,6 +113,50 @@ func (h *EventHandler) Start() error {
 
 	for msg := range msgs {
 		go h.handleMessage(msg)
+	}
+
+	return nil
+}
+
+func (h *EventHandler) SetupQueue(ch *amqp.Channel) error {
+	exchange := fmt.Sprintf("%s.events", h.config.SourceService)
+
+	err := ch.ExchangeDeclare(
+		exchange,
+		"topic",
+		true,
+		true,
+		false,
+		false,
+		nil,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to declare exchange: %v", err)
+	}
+
+	queue, err := ch.QueueDeclare(
+		h.queueName,
+		true,
+		h.autoDelete,
+		h.exclusive,
+		false,
+		nil,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to declare queue: %v", err)
+	}
+
+	h.queue = &queue
+
+	err = ch.QueueBind(
+		h.queueName,
+		h.config.EventType,
+		exchange,
+		false,
+		nil,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to bind queue: %v", err)
 	}
 
 	return nil
