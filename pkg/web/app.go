@@ -17,7 +17,7 @@ type Config struct {
 	Addr string // Address to bind the server to
 }
 
-func New(config ...Config) *Server {
+func New() *Server {
 	http := &Server{
 		routes: make([]Route, 0),
 	}

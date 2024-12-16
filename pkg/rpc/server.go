@@ -1,7 +1,6 @@
 package rpc
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -31,7 +30,7 @@ func (s *Server) RegisterMethod(methodName string, handler func(args interface{}
 }
 
 // Start begins listening for RPC requests on the service's queue.
-func (s *Server) Start(ctx context.Context) error {
+func (s *Server) Start() error {
 	var err error
 
 	queueName := fmt.Sprintf(RpcQueueTemplate, s.serviceName)
@@ -110,18 +109,25 @@ func (s *Server) Start(ctx context.Context) error {
 func (s *Server) handleRequest(msg amqp.Delivery) {
 	defer func() {
 		if r := recover(); r != nil {
-			fmt.Printf("panic occurred: %v\n", r)
+			log.Printf("panic occurred: %v\n", r)
 			// TODO: this could make a loop to requeue, NACK a message only 3 times for example
-			msg.Nack(false, false)
+			err := msg.Nack(false, false)
+			if err != nil {
+				log.Printf("failed to nack message: %v", err)
+			}
 		}
 	}()
 
 	err := s.processMessage(msg)
 	if err != nil {
-		fmt.Printf("error processing message: %v\n", err)
+		log.Printf("error processing message: %v\n", err)
 	}
 
-	msg.Ack(false)
+	err = msg.Ack(false)
+
+	if err != nil {
+		log.Printf("error acknowledging message: %v\n", err)
+	}
 }
 
 // processMessage decodes and handles the message logic.

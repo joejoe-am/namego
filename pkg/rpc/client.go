@@ -145,7 +145,7 @@ func setupReplyQueue() error {
 		amqp.Table{"x-expires": int32(RpcReplyQueueTtl)},
 	)
 	if err != nil {
-		log.Printf("failed to declare reply queue: %w", err)
+		log.Printf("failed to declare reply queue: %s", err)
 		return err
 	}
 
@@ -157,7 +157,7 @@ func setupReplyQueue() error {
 		nil,
 	)
 	if err != nil {
-		log.Printf("failed to bind reply queue: %w", err)
+		log.Printf("failed to bind reply queue: %s", err)
 		return err
 	}
 
