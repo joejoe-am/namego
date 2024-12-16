@@ -1,46 +1,49 @@
 package events
 
 import (
-	"fmt"
 	amqp "github.com/rabbitmq/amqp091-go"
+	"log"
 )
 
 // Dispatch sends an event with the given type and payload.
 func Dispatch(conn *amqp.Connection, sourceService string, eventType string, payload []byte) error {
-	exchangeName := fmt.Sprintf("%s.events", sourceService)
+	exchangeName := sourceService + ".events"
 
 	ch, err := conn.Channel()
 	if err != nil {
-		return fmt.Errorf("failed to open RabbitMQ channel: %v", err)
+		log.Printf("failed to open RabbitMQ channel: %v", err)
+		return err
 	}
 
 	err = ch.ExchangeDeclare(
 		exchangeName,
 		"topic",
-		true,  // durable
-		true,  // autoDelete
-		false, // internal
-		false, // noWait
-		nil,   // arguments
+		true,
+		true,
+		false,
+		false,
+		nil,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to declare exchange: %v", err)
+		log.Printf("failed to declare RabbitMQ exchange: %v", err)
+		return err
 	}
 
 	err = ch.Publish(
-		exchangeName, // exchange
-		eventType,    // routing key
-		false,        // mandatory
-		false,        // immediate
+		exchangeName,
+		eventType, // routing key
+		false,
+		false,
 		amqp.Publishing{
 			ContentType: "application/json",
 			Body:        payload,
 		},
 	)
 	if err != nil {
-		return fmt.Errorf("failed to publish event: %v", err)
+		log.Printf("failed to publish event: %v", err)
+		return err
 	}
 
-	fmt.Printf("Event dispatched: %s to %s.exchange\n", eventType, sourceService)
+	log.Printf("Event dispatched: %s to %s.exchange\n", eventType, sourceService)
 	return nil
 }

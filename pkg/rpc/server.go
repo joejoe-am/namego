@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	amqp "github.com/rabbitmq/amqp091-go"
+	"log"
 	"strings"
 )
 
@@ -39,7 +40,8 @@ func (s *Server) Start(ctx context.Context) error {
 	s.amqpChannel, err = s.amqpConnection.Channel()
 
 	if err != nil {
-		return fmt.Errorf("error creating amqp channel: %v", err)
+		log.Printf("error creating amqp channel: %v", err)
+		return err
 	}
 
 	_, err = s.amqpChannel.QueueDeclare(
@@ -52,7 +54,8 @@ func (s *Server) Start(ctx context.Context) error {
 	)
 
 	if err != nil {
-		return fmt.Errorf("failed to declare RPC queue: %v", err)
+		log.Printf("failed to declare RPC queue: %v", err)
+		return err
 	}
 
 	err = s.amqpChannel.QueueBind(
@@ -63,7 +66,8 @@ func (s *Server) Start(ctx context.Context) error {
 		nil,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to bind RPC queue: %v", err)
+		log.Printf("failed to bind RPC queue: %v", err)
+		return err
 	}
 
 	err = s.amqpChannel.Qos(
@@ -83,7 +87,8 @@ func (s *Server) Start(ctx context.Context) error {
 	)
 
 	if err != nil {
-		return fmt.Errorf("failed to consume messages: %v", err)
+		log.Printf("failed to consume messages: %v", err)
+		return err
 	}
 
 	workerPool := make(chan struct{}, 2)
@@ -106,7 +111,8 @@ func (s *Server) handleRequest(msg amqp.Delivery) {
 	defer func() {
 		if r := recover(); r != nil {
 			fmt.Printf("panic occurred: %v\n", r)
-			msg.Nack(false, true) // Requeue the message in case of panic
+			// TODO: this could make a loop to requeue, NACK a message only 3 times for example
+			msg.Nack(false, false)
 		}
 	}()
 
@@ -115,20 +121,19 @@ func (s *Server) handleRequest(msg amqp.Delivery) {
 		fmt.Printf("error processing message: %v\n", err)
 	}
 
-	msg.Ack(false) // Acknowledge the message on success
+	msg.Ack(false)
 }
 
 // processMessage decodes and handles the message logic.
 func (s *Server) processMessage(msg amqp.Delivery) error {
-	// Validate routing key structure
 	routingKeyParts := strings.Split(msg.RoutingKey, ".")
+
 	if len(routingKeyParts) != 2 {
 		return s.sendResponse(msg, nil, fmt.Errorf("invalid routing key: %s", msg.RoutingKey))
 	}
 
-	methodName := routingKeyParts[1] // Extract method name
+	methodName := routingKeyParts[1]
 
-	// Parse the request body
 	var request struct {
 		Args   interface{}            `json:"args"`
 		Kwargs map[string]interface{} `json:"kwargs"`
@@ -137,14 +142,13 @@ func (s *Server) processMessage(msg amqp.Delivery) error {
 		return s.sendResponse(msg, nil, fmt.Errorf("invalid request: %v", err))
 	}
 
-	// Check if the handler exists
 	handler, exists := s.methods[methodName]
 	if !exists {
 		return s.sendResponse(msg, nil, fmt.Errorf("method not found: %s", methodName))
 	}
 
-	// Invoke the handler
 	result, err := handler(request.Args, request.Kwargs)
+
 	return s.sendResponse(msg, result, err)
 }
 
@@ -171,7 +175,8 @@ func (s *Server) sendResponse(msg amqp.Delivery, result interface{}, err error) 
 
 	body, marshalErr := json.Marshal(response)
 	if marshalErr != nil {
-		return fmt.Errorf("failed to serialize response: %v", marshalErr)
+		log.Printf("failed to serialize response: %v", marshalErr)
+		return marshalErr
 	}
 
 	publishErr := s.amqpChannel.Publish(
@@ -186,7 +191,8 @@ func (s *Server) sendResponse(msg amqp.Delivery, result interface{}, err error) 
 		},
 	)
 	if publishErr != nil {
-		return fmt.Errorf("failed to send response: %v", publishErr)
+		log.Printf("failed to send response: %v", publishErr)
+		return err
 	}
 
 	return nil

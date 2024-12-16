@@ -5,6 +5,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/joejoe-am/namego/pkg/rpc"
 	amqp "github.com/rabbitmq/amqp091-go"
+	"log"
 )
 
 type HandlerType string
@@ -89,7 +90,8 @@ func NewEventHandler(cfg EventConfig) (*EventHandler, error) {
 func (h *EventHandler) Start(conn *amqp.Connection) error {
 	ch, err := conn.Channel()
 	if err != nil {
-		return fmt.Errorf("failed to open RabbitMQ channel: %v", err)
+		log.Printf("failed to open RabbitMQ channel: %v", err)
+		return err
 	}
 
 	err = h.SetupQueue(ch)
@@ -108,7 +110,8 @@ func (h *EventHandler) Start(conn *amqp.Connection) error {
 		nil,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to consume messages: %v", err)
+		log.Printf("failed to consume RabbitMQ events: %v", err)
+		return err
 	}
 
 	for msg := range msgs {
@@ -131,7 +134,8 @@ func (h *EventHandler) SetupQueue(ch *amqp.Channel) error {
 		nil,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to declare exchange: %v", err)
+		log.Printf("failed to declare exchange: %v", err)
+		return err
 	}
 
 	queue, err := ch.QueueDeclare(
@@ -143,7 +147,8 @@ func (h *EventHandler) SetupQueue(ch *amqp.Channel) error {
 		nil,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to declare queue: %v", err)
+		log.Printf("failed to declare queue: %v", err)
+		return err
 	}
 
 	h.queue = &queue
@@ -156,7 +161,8 @@ func (h *EventHandler) SetupQueue(ch *amqp.Channel) error {
 		nil,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to bind queue: %v", err)
+		log.Printf("failed to bind queue: %v", err)
+		return err
 	}
 
 	return nil
@@ -167,7 +173,7 @@ func (h *EventHandler) handleMessage(msg amqp.Delivery) {
 
 	err := handler(msg.Body)
 	if err != nil {
-		fmt.Printf("handler error: %v\n", err)
+		log.Printf("handler error: %v\n", err)
 		_ = msg.Nack(false, h.config.RequeueOnError)
 		return
 	}

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/google/uuid"
 	amqp "github.com/rabbitmq/amqp091-go"
+	"log"
 	"sync"
 )
 
@@ -43,7 +44,8 @@ func InitClient(amqpConnection *amqp.Connection) error {
 
 	amqpChannel, err = amqpConnection.Channel()
 	if err != nil {
-		return fmt.Errorf("error creating amqp channel: %v", err)
+		log.Printf("error creating amqp channel: %v", err)
+		return err
 	}
 
 	err = amqpChannel.Qos(
@@ -52,7 +54,8 @@ func InitClient(amqpConnection *amqp.Connection) error {
 		false,
 	)
 	if err != nil {
-		return fmt.Errorf("error setting Qos: %s", err)
+		log.Printf("error setting qos: %v", err)
+		return err
 	}
 
 	err = setupReplyQueue()
@@ -76,7 +79,8 @@ func (c *Client) CallRpc(methodName string, args interface{}) (*Response, error)
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal arguments: %v", err)
+		fmt.Printf("error marshalling payload: %v", err)
+		return nil, err
 	}
 
 	// Create a channel to wait for the response
@@ -98,7 +102,8 @@ func (c *Client) CallRpc(methodName string, args interface{}) (*Response, error)
 		},
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to publish message: %v", err)
+		log.Printf("failed to publish message: %v", err)
+		return nil, err
 	}
 
 	// Wait for the reply
@@ -106,7 +111,8 @@ func (c *Client) CallRpc(methodName string, args interface{}) (*Response, error)
 	case msg := <-replyChan:
 		var response Response
 		if err = json.Unmarshal(msg.Body, &response); err != nil {
-			return nil, fmt.Errorf("failed to decode response: %v", err)
+			log.Printf("failed to decode response: %v", err)
+			return nil, err
 		}
 
 		if response.Error != nil {
@@ -139,7 +145,8 @@ func setupReplyQueue() error {
 		amqp.Table{"x-expires": int32(RpcReplyQueueTtl)},
 	)
 	if err != nil {
-		return fmt.Errorf("failed to declare reply queue: %w", err)
+		log.Printf("failed to declare reply queue: %w", err)
+		return err
 	}
 
 	err = amqpChannel.QueueBind(
@@ -150,7 +157,8 @@ func setupReplyQueue() error {
 		nil,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to bind reply queue: %w", err)
+		log.Printf("failed to bind reply queue: %w", err)
+		return err
 	}
 
 	return nil
@@ -177,6 +185,7 @@ func consumeReplies() {
 			ch.(chan amqp.Delivery) <- msg
 			_ = msg.Ack(false)
 		} else {
+			// TODO: this could make a loop to requeue, NACK a message only 3 times for example
 			_ = msg.Nack(false, false)
 		}
 	}
