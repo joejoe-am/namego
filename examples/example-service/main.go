@@ -32,7 +32,14 @@ func main() {
 	defer amqpConnection.Close()
 
 	// RPC client example
-	authRpc, quotaRpc, err := SetupRPCClients(amqpConnection)
+	err := rpc.InitClient(amqpConnection)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	authRpc := rpc.NewClient("authnzng")
+	quotaRpc := rpc.NewClient("quota")
 
 	if err != nil {
 		log.Fatalf("failed to initialize RPC clients: %v", err)
@@ -88,7 +95,7 @@ func main() {
 	go func() {
 		defer wg.Done()
 		fmt.Println("starting rpc server")
-		if err := rpcServer.Start(ctx); err != nil {
+		if err := rpcServer.Start(); err != nil {
 			log.Printf("RPC server error: %v", err)
 			cancel()
 		}

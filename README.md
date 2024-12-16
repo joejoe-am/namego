@@ -17,26 +17,30 @@ go get github.com/joejoe-am/namego
 **Feature:** Enable RPC communication between Go and Nameko services.
 
 #### Example: Setting up an RPC Client
-Use `SetupRPCClients` to establish connections with Nameko services via RabbitMQ:
+Use `NewClient` to establish connections with Nameko services via RabbitMQ:
 
-```go
+``` go
+import (
+"github.com/joejoe-am/namego/pkg/rpc"
+)
+
 amqpConnection := InitRabbitMQ("amqp://guest:guest@localhost:5672/")
 
-authRpc, quotaRpc, err := SetupRPCClients(amqpConnection)
-if err != nil {
-    log.Fatalf("failed to initialize RPC clients: %v", err)
-}
+err := rpc.InitClient(amqpConnection)
 
-response, err := authRpc.CallRpc("health_check", map[string]string{})
-fmt.Println(response, err)
+svcRpc := rpc.NewClient("other_service")
 ```
 
 #### Example: Setting up an RPC Server
 Use `rpc.NewServer` to create an RPC server and register methods for remote calls:
 
-```go
-rpcServer := rpc.NewServer("nameko", amqpConnection)
-rpcServer.RegisterMethod("multiply", service.Multiply)
+``` go
+import (
+    "github.com/joejoe-am/namego/pkg/rpc"
+)
+
+rpcServer := rpc.NewServer("my_service_name", amqpConnection)
+rpcServer.RegisterMethod("example_method", ExampleMethodFunction)
 
 ctx := context.Background()
 go func() {
@@ -53,10 +57,13 @@ go func() {
 #### Example: Setting up an HTTP Server
 Use `web.New` to create an HTTP server and define routes:
 
-```go
+``` go
+import (
+    "github.com/joejoe-am/namego/pkg/web"
+)
+
 server := web.New()
-server.Get("/health", gateway.HealthHandler)
-server.Get("/auth-health", gateway.AuthHealthHandler(authRpc), gateway.LoggingMiddleware)
+server.Get("/health", gateway.HealthHandler, LoggingMiddleware)
 
 go func() {
     fmt.Println("Starting HTTP server on :8080")
@@ -73,44 +80,71 @@ go func() {
 #### Example: Dispatching Events
 Dispatch events using a custom function and RabbitMQ connection:
 
-```go
-service.DispatchEventExampleFunction(amqpConnection, "my-service")
-```
+``` go
+import (
+    "encoding/json"
+    "fmt"
+    "github.com/joejoe-am/namego/pkg/rpc/events"
+)
 
-#### Example: Handling Events (Commented Out in Template)
-Use `events.NewEventHandler` to configure and start event handlers:
-
-```go
-handlerConfig := events.EventConfig{
-    SourceService:    "auth",
-    EventType:        "USER_CREATED",
-    HandlerType:      events.ServicePool,
-    ReliableDelivery: true,
-    HandlerFunction:  service.EventHandlerFunction,
+eventData := map[string]interface{}{
+    "id":   "12345",
+    "name": "example",
 }
 
-eventHandler, err := events.NewEventHandler(handlerConfig)
+payload, err := json.Marshal(eventData)
+
 if err != nil {
-    log.Fatalf("failed to create event handler: %v", err)
+    fmt.Printf("Failed to marshal event data: %v", err)
 }
 
-if err := eventHandler.Start(amqpConnection); err != nil {
-    log.Fatalf("failed to start event handler: %v", err)
+err = events.Dispatch(amqpConnection, "my_service_name", "TEST_EVENT_HANDLER", payload)
+
+if err != nil {
+    fmt.Printf("Failed to dispatch event: %v\n", err)
+} else {
+    fmt.Println("Event successfully dispatched.")
 }
 ```
 
-### 4. Middleware Support
+[//]: # (#### Example: Handling Events &#40;Commented Out in Template&#41;)
 
-**Feature:** Add middleware for HTTP routes easily.
+[//]: # (Use `events.NewEventHandler` to configure and start event handlers:)
 
-#### Example: Adding Middleware
-Pass middleware functions while defining routes:
+[//]: # ()
+[//]: # (```go)
 
-```go
-server.Get("/auth-health", gateway.AuthHealthHandler(authRpc), gateway.LoggingMiddleware)
-```
+[//]: # (handlerConfig := events.EventConfig{)
 
-Here, `gateway.LoggingMiddleware` is a custom middleware that can log requests or add other pre-processing functionality.
+[//]: # (    SourceService:    "auth",)
+
+[//]: # (    EventType:        "USER_CREATED",)
+
+[//]: # (    HandlerType:      events.ServicePool,)
+
+[//]: # (    ReliableDelivery: true,)
+
+[//]: # (    HandlerFunction:  service.EventHandlerFunction,)
+
+[//]: # (})
+
+[//]: # ()
+[//]: # (eventHandler, err := events.NewEventHandler&#40;handlerConfig&#41;)
+
+[//]: # (if err != nil {)
+
+[//]: # (    log.Fatalf&#40;"failed to create event handler: %v", err&#41;)
+
+[//]: # (})
+
+[//]: # ()
+[//]: # (if err := eventHandler.Start&#40;amqpConnection&#41;; err != nil {)
+
+[//]: # (    log.Fatalf&#40;"failed to start event handler: %v", err&#41;)
+
+[//]: # (})
+
+[//]: # (```)
 
 ## Configuration
 
