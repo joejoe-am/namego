@@ -4,10 +4,8 @@ import (
 	"context"
 	"fmt"
 	"github.com/joejoe-am/namego/configs"
-	"github.com/joejoe-am/namego/examples/example-service/gateway"
 	"github.com/joejoe-am/namego/examples/example-service/service"
 	"github.com/joejoe-am/namego/pkg/rpc"
-	"github.com/joejoe-am/namego/pkg/web"
 	"log"
 	"os"
 	"os/signal"
@@ -51,11 +49,6 @@ func main() {
 	response, err = quotaRpc.CallRpc("health_check", map[string]string{})
 	fmt.Println(response, err)
 
-	// HTTP server example
-	server := web.New()
-	server.Get("/health", gateway.HealthHandler)
-	server.Get("/auth-health", gateway.AuthHealthHandler(authRpc), gateway.LoggingMiddleware)
-
 	// RPC server example
 	rpcServer := rpc.NewServer("nameko", amqpConnection)
 	rpcServer.RegisterMethod("multiply", service.Multiply)
@@ -80,16 +73,6 @@ func main() {
 
 	// Dispatch event Example
 	service.DispatchEventExampleFunction(amqpConnection, cfg.ServiceName)
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		fmt.Println("starting http server on :8080")
-		if err := server.Listen(":8080"); err != nil {
-			log.Printf("Web server error: %v", err)
-			cancel()
-		}
-	}()
 
 	wg.Add(1)
 	go func() {
