@@ -1,10 +1,10 @@
-package rpc
+package events
 
 import (
 	"reflect"
 	"runtime"
 )
 
-func GetFunctionName(i interface{}) string {
+func getFunctionName(i interface{}) string {
 	return runtime.FuncForPC(reflect.ValueOf(i).Pointer()).Name()
 }

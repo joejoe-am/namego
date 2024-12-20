@@ -48,7 +48,7 @@ func generateQueueName(eventCfg EventConfig) (string, bool, bool) {
 			eventCfg.SourceService,
 			eventCfg.EventType,
 			rpc.Cfg.ServiceName,
-			rpc.GetFunctionName(eventCfg.HandlerFunction),
+			getFunctionName(eventCfg.HandlerFunction),
 		)
 	case Singleton:
 		queueName = fmt.Sprintf(
@@ -65,7 +65,7 @@ func generateQueueName(eventCfg EventConfig) (string, bool, bool) {
 			eventCfg.SourceService,
 			eventCfg.EventType,
 			rpc.Cfg.ServiceName,
-			rpc.GetFunctionName(eventCfg.HandlerFunction),
+			getFunctionName(eventCfg.HandlerFunction),
 			eventCfg.BroadcastID,
 		)
 		exclusive = !eventCfg.ReliableDelivery
