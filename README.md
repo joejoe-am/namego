@@ -21,7 +21,7 @@ Use `NewClient` to establish connections with Nameko services via RabbitMQ:
 
 ``` go
 import (
-"github.com/joejoe-am/namego/pkg/rpc"
+    "github.com/joejoe-am/namego/pkg/rpc"
 )
 
 amqpConnection := InitRabbitMQ("amqp://guest:guest@localhost:5672/")
@@ -107,51 +107,25 @@ if err != nil {
 }
 ```
 
-[//]: # (#### Example: Handling Events &#40;Commented Out in Template&#41;)
-
-[//]: # (Use `events.NewEventHandler` to configure and start event handlers:)
-
-[//]: # ()
-[//]: # (```go)
-
-[//]: # (handlerConfig := events.EventConfig{)
-
-[//]: # (    SourceService:    "auth",)
-
-[//]: # (    EventType:        "USER_CREATED",)
-
-[//]: # (    HandlerType:      events.ServicePool,)
-
-[//]: # (    ReliableDelivery: true,)
-
-[//]: # (    HandlerFunction:  service.EventHandlerFunction,)
-
-[//]: # (})
-
-[//]: # ()
-[//]: # (eventHandler, err := events.NewEventHandler&#40;handlerConfig&#41;)
-
-[//]: # (if err != nil {)
-
-[//]: # (    log.Fatalf&#40;"failed to create event handler: %v", err&#41;)
-
-[//]: # (})
-
-[//]: # ()
-[//]: # (if err := eventHandler.Start&#40;amqpConnection&#41;; err != nil {)
-
-[//]: # (    log.Fatalf&#40;"failed to start event handler: %v", err&#41;)
-
-[//]: # (})
-
-[//]: # (```)
-
 ## Configuration
 
 The package relies on configuration provided by the `configs` module. Example configurations include:
 
 - `RabbitMQURL`: URL for RabbitMQ connection.
 - `ServiceName`: The name of the service dispatching events.
+
+### Config File Path
+
+By default, the package looks for a `config.yaml` file in the root of your project directory. If the file is not found, it searches parent directories until it reaches the system root.
+
+#### Custom Config Path
+To override the default path, you can set an environment variable:
+
+```bash
+export CONFIG_PATH=/path/to/your/config.yaml
+```
+
+This allows flexibility in specifying configuration locations.
 
 ## Contributing
 
@@ -160,12 +134,7 @@ Contributions are welcome! Feel free to open an issue or submit a pull request o
 ### TODO
 
 - Refactor package structure and naming conventions.
-- Add more examples for event handling.
 - Enhance documentation.
-
-## License
-
-This project is licensed under the MIT License. See the LICENSE file for details.
 
 ## Acknowledgments
 
