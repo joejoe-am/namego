@@ -14,23 +14,14 @@ type Configs struct {
 	ExchangeName string `yaml:"exchange_name"`
 }
 
-const (
-	DefaultConfigFile = "configs/config.yaml"
-)
-
-var (
-	configs *Configs
-)
+var configs *Configs
 
 // LoadConfigs loads the configuration once
 func LoadConfigs() {
-	// Get the current working directory
-	workingDir, err := os.Getwd()
-	if err != nil {
-		log.Fatalf("failed to get working directory: %v", err)
+	configPath := findConfigPath()
+	if configPath == "" {
+		log.Fatal("config.yaml not found in project root or any parent directory")
 	}
-
-	configPath := filepath.Join(workingDir, DefaultConfigFile)
 
 	file, err := os.Open(configPath)
 	if err != nil {
@@ -50,7 +41,7 @@ func LoadConfigs() {
 
 	// Validate required fields
 	if configs.ServiceName == "" || configs.RabbitMQURL == "" {
-		log.Fatal("missing required configuration fields in config.yml")
+		log.Fatal("missing required configuration fields in config.yaml")
 	}
 }
 
@@ -60,4 +51,31 @@ func GetConfigs() *Configs {
 		LoadConfigs()
 	}
 	return configs
+}
+
+// findConfigPath searches for config.yaml in project root or parent directories
+func findConfigPath() string {
+	// Check if CONFIG_PATH is set
+	if envPath, exists := os.LookupEnv("CONFIG_PATH"); exists {
+		return envPath
+	}
+
+	// Start searching from the current working directory
+	workingDir, err := os.Getwd()
+	if err != nil {
+		log.Fatalf("failed to get working directory: %v", err)
+	}
+
+	return searchConfigFile(workingDir)
+}
+
+// searchConfigFile recursively goes up directories to find config.yaml
+func searchConfigFile(startDir string) string {
+	for dir := startDir; dir != "/"; dir = filepath.Dir(dir) {
+		configPath := filepath.Join(dir, "config.yaml")
+		if _, err := os.Stat(configPath); err == nil {
+			return configPath
+		}
+	}
+	return ""
 }
